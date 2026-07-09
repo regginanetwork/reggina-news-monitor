@@ -14,7 +14,7 @@ RSS_FEEDS = [
     },
     {
         'source': 'TuttoReggina',
-        'url': 'https://www.tuttoreggina.com/feed/',
+        'url': 'https://www.tuttoreggina.com/reggina/feed/',
         'filter': False
     },
     {
@@ -24,7 +24,12 @@ RSS_FEEDS = [
     },
 ]
 
-KEYWORDS = ['reggina', 'amaranto', 'granillo', 'sant\'agata']
+KEYWORDS = [
+    'reggina', 'amaranto', 'granillo', "sant'agata",
+    'sant agata', 'rhegium', 'regium', 'lotito reggina',
+    'marchionni', 'romairone', 'coinu', 'calveri'
+]
+
 SEEN_FILE = 'seen_articles.json'
 
 def load_seen():
@@ -38,7 +43,11 @@ def save_seen(seen):
         json.dump(list(seen), f, indent=2)
 
 def is_relevant(entry):
-    text = (entry.get('title', '') + ' ' + entry.get('summary', '')).lower()
+    text = (
+        entry.get('title', '') + ' ' +
+        entry.get('summary', '') + ' ' +
+        entry.get('link', '')
+    ).lower()
     return any(kw in text for kw in KEYWORDS)
 
 def send_telegram(message):
