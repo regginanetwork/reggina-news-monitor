@@ -14,7 +14,7 @@ RSS_FEEDS = [
     },
     {
         'source': 'TuttoReggina',
-        'url': 'https://www.tuttoreggina.com/feed/',
+        'url': 'https://www.tuttoreggina.com/rss',
         'filter': False
     },
     {
