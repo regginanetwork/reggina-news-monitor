@@ -58,7 +58,6 @@ def send_telegram(message):
 
 def check_feeds():
     seen = load_seen()
-    send_telegram("✅ Bot attivo e funzionante!")
     new_seen = set(seen)
     is_first_run = len(seen) == 0
 
