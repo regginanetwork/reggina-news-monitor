@@ -14,20 +14,14 @@ RSS_FEEDS = [
     },
     {
         'source': 'TuttoReggina',
-        'url': 'https://www.tuttoreggina.com/reggina/feed/',
+        'url': 'https://www.tuttoreggina.com/feed/',
         'filter': False
     },
     {
         'source': 'Il Dispaccio',
-        'url': 'https://ildispaccio.it/feed/',
-        'filter': True
+        'url': 'https://ildispaccio.it/tag/reggina/feed/',
+        'filter': False
     },
-]
-
-KEYWORDS = [
-    'reggina', 'amaranto', 'granillo', "sant'agata",
-    'sant agata', 'rhegium', 'regium', 'lotito reggina',
-    'marchionni', 'romairone', 'coinu', 'calveri'
 ]
 
 SEEN_FILE = 'seen_articles.json'
