@@ -22,6 +22,31 @@ RSS_FEEDS = [
         'url': 'https://ildispaccio.it/tag/reggina/feed/',
         'filter': False
     },
+    {
+        'source': 'Pedullà',
+        'url': 'https://www.alfredopedulla.com/squadre/reggina/feed/',
+        'filter': False
+    },
+    {
+        'source': 'Il Reggino',
+        'url': 'https://www.ilreggino.it/tag/reggina/feed/',
+        'filter': False
+    },
+    {
+        'source': 'Il Tifoso Reggino',
+        'url': 'https://iltifosoreggino.it/category/calcio/reggina/feed/',
+        'filter': False
+    },
+    {
+        'source': 'SerieD24',
+        'url': 'https://www.seried24.com/rss',
+        'filter': True
+    },
+    {
+        'source': 'Reggina Ufficiale',
+        'url': 'https://www.reggina1914.it/feed/',
+        'filter': True
+    },
 ]
 
 SEEN_FILE = 'seen_articles.json'
