@@ -45,7 +45,7 @@ RSS_FEEDS = [
     {
         'source': 'Reggina Ufficiale',
         'url': 'https://www.reggina1914.it/feed/',
-        'filter': True
+        'filter': False
     },
 ]
 
