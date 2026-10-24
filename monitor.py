@@ -15,12 +15,17 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # Il token (segreto RN_DISPATCH_TOKEN) deve avere il permesso "Actions: write" sul repository del post.
 RN_DISPATCH_TOKEN = os.environ.get('RN_DISPATCH_TOKEN')
 WHATSAPP_REPO = 'regginanetwork/rn-whatsapp'
-WHATSAPP_WORKFLOW = 'pubblica-formazioni.yml'
+WHATSAPP_WORKFLOW_FORMAZIONI = 'pubblica-formazioni.yml'
+WHATSAPP_WORKFLOW_CONVOCATI = 'salva-convocati.yml'
 WHATSAPP_REF = 'main'
 FORMAZIONI_SOURCE = 'Reggina Ufficiale'
 FORMAZIONI_TITLE_RE = re.compile(r',\s*le formazioni ufficiali', re.IGNORECASE)
+# "Nissa-Reggina, i convocati di mister Marchionni"
+CONVOCATI_TITLE_RE = re.compile(r'^[^,]+-[^,]+,\s*i convocati', re.IGNORECASE)
 # Il post parte solo se l'articolo è stato pubblicato da poco (le formazioni escono circa 1 ora prima del fischio)
 FORMAZIONI_MAX_AGE_MINUTES = 180
+# I convocati escono il giorno prima: li salvo se l'articolo ha meno di 24 ore
+CONVOCATI_MAX_AGE_MINUTES = 24 * 60
 
 RSS_FEEDS = [
     {
@@ -120,6 +125,15 @@ def is_lineup_article(source, entry):
     return bool(FORMAZIONI_TITLE_RE.search(entry.get('title', '')))
 
 
+def is_convocati_article(source, entry):
+    """True solo per l'articolo "<partita>, i convocati ..." del sito ufficiale della Reggina."""
+    if source != FORMAZIONI_SOURCE:
+        return False
+    if 'reggina1914.it' not in entry.get('link', ''):
+        return False
+    return bool(CONVOCATI_TITLE_RE.search(entry.get('title', '')))
+
+
 def is_recent(entry, max_minutes):
     """True se l'articolo è stato pubblicato negli ultimi max_minutes minuti (data del feed, in UTC)."""
     published = entry.get('published_parsed') or entry.get('updated_parsed')
@@ -130,20 +144,21 @@ def is_recent(entry, max_minutes):
     return -300 <= age_seconds <= max_minutes * 60
 
 
-def trigger_whatsapp_post(link, title):
-    """Avvia su GitHub il workflow che costruisce e pubblica il post WhatsApp. In caso di problemi avvisa su Telegram."""
+def trigger_workflow(workflow, input_name, link, title, label):
+    """Avvia su GitHub un workflow del repository del post WhatsApp, passandogli l'indirizzo dell'articolo.
+    In caso di problemi avvisa su Telegram."""
     safe_title = html.escape(title)
     if not RN_DISPATCH_TOKEN:
-        print("RN_DISPATCH_TOKEN non impostato: post WhatsApp non avviato.")
+        print("RN_DISPATCH_TOKEN non impostato: " + label + " non avviato.")
         send_telegram(
-            f"⚠️ <b>Post WhatsApp non avviato</b>\n\n{safe_title}\n\n"
+            f"⚠️ <b>{label} non avviato</b>\n\n{safe_title}\n\n"
             "Manca il token per avviare il workflow su GitHub."
         )
         return False
 
     url = (
         f'https://api.github.com/repos/{WHATSAPP_REPO}'
-        f'/actions/workflows/{WHATSAPP_WORKFLOW}/dispatches'
+        f'/actions/workflows/{workflow}/dispatches'
     )
     try:
         response = requests.post(
@@ -153,21 +168,21 @@ def trigger_whatsapp_post(link, title):
                 'Authorization': f'Bearer {RN_DISPATCH_TOKEN}',
                 'X-GitHub-Api-Version': '2022-11-28',
             },
-            json={'ref': WHATSAPP_REF, 'inputs': {'url_formazioni': link}},
+            json={'ref': WHATSAPP_REF, 'inputs': {input_name: link}},
             timeout=20,
         )
         if 200 <= response.status_code < 300:
-            print(f"Post WhatsApp avviato per: {title}")
+            print(f"{label} avviato per: {title}")
             return True
-        print(f"Avvio post WhatsApp fallito (HTTP {response.status_code}).")
+        print(f"Avvio di '{label}' fallito (HTTP {response.status_code}).")
         send_telegram(
-            f"⚠️ <b>Post WhatsApp non avviato</b>\n\n{safe_title}\n\n"
+            f"⚠️ <b>{label} non avviato</b>\n\n{safe_title}\n\n"
             f"GitHub ha risposto con errore {response.status_code}."
         )
     except Exception as e:
-        print(f"Errore avvio post WhatsApp: {e}")
+        print(f"Errore avvio '{label}': {e}")
         send_telegram(
-            f"⚠️ <b>Post WhatsApp non avviato</b>\n\n{safe_title}\n\n"
+            f"⚠️ <b>{label} non avviato</b>\n\n{safe_title}\n\n"
             "Errore di connessione a GitHub."
         )
     return False
@@ -209,9 +224,19 @@ def check_feeds(seen, is_first_run):
                 # Formazioni ufficiali: avvia il post sul canale WhatsApp
                 if is_lineup_article(source, entry):
                     if is_recent(entry, FORMAZIONI_MAX_AGE_MINUTES):
-                        trigger_whatsapp_post(link, title)
+                        trigger_workflow(
+                            WHATSAPP_WORKFLOW_FORMAZIONI, 'url_formazioni', link, title, 'Post WhatsApp'
+                        )
                     else:
                         print(f"Formazioni non recenti, post WhatsApp non avviato: {title}")
+                # Convocati: avvia il salvataggio dell'elenco, che servirà al post delle formazioni
+                elif is_convocati_article(source, entry):
+                    if is_recent(entry, CONVOCATI_MAX_AGE_MINUTES):
+                        trigger_workflow(
+                            WHATSAPP_WORKFLOW_CONVOCATI, 'url_convocati', link, title, 'Salvataggio dei convocati'
+                        )
+                    else:
+                        print(f"Convocati non recenti, salvataggio non avviato: {title}")
 
         except Exception as e:
             print(f"Errore con {source}: {e}")
