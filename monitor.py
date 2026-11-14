@@ -29,11 +29,6 @@ CONVOCATI_MAX_AGE_MINUTES = 24 * 60
 
 RSS_FEEDS = [
     {
-        'source': 'CityNow',
-        'url': 'https://www.citynow.it/tag/reggina/feed/',
-        'filter': False
-    },
-    {
         'source': 'TuttoReggina',
         'url': 'https://www.tuttoreggina.com/rss',
         'filter': False
@@ -77,6 +72,15 @@ RSS_FEEDS = [
 ]
 
 KEYWORDS = ['reggina']
+
+# CityNow non ha più un feed RSS utilizzabile: gli articoli si leggono dalla pagina del tag.
+CITYNOW_SOURCE = 'CityNow'
+CITYNOW_TAG_URL = 'https://www.citynow.it/tag/reggina/'
+CITYNOW_PREFIX = 'https://www.citynow.it/'
+# Sotto la lista degli articoli la pagina ha altri blocchi con titoli ("Consigliati", "Ultime notizie"):
+# gli articoli veri si riconoscono perché subito dopo il titolo c'è la data, ad esempio "14 Novembre 2026".
+CITYNOW_DATE_RE = re.compile(r'^\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4}$')
+CITYNOW_MAX_ARTICLES = 15
 
 SEEN_FILE = 'seen_articles.json'
 LND_COMUNICATI_URL = 'https://lnd.it/seried/comunicati/'
@@ -244,6 +248,79 @@ def check_feeds(seen, is_first_run):
     return new_seen
 
 
+def fetch_citynow():
+    """Legge gli articoli dalla pagina del tag Reggina di CityNow.
+    Restituisce una lista di dizionari {'id', 'title', 'link'}, dal più recente al meno recente."""
+    headers = {'User-Agent': 'Mozilla/5.0 (compatible; RegginaNewsMonitor/1.0)'}
+    response = requests.get(CITYNOW_TAG_URL, headers=headers, timeout=20)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    articoli = []
+    visti = set()
+    for h2 in soup.find_all('h2'):
+        a = h2.find('a', href=True)
+        if not a:
+            continue
+        link = a['href'].strip()
+        if not link.startswith(CITYNOW_PREFIX) or link in visti:
+            continue
+        titolo = a.get_text(' ', strip=True)
+        # il primo testo dopo il titolo deve essere la data; altrimenti è un blocco laterale
+        # (si parte dall'ultimo elemento contenuto nell'h2, altrimenti la ricerca ritroverebbe il titolo stesso)
+        fine = h2
+        while getattr(fine, 'contents', None):
+            fine = fine.contents[-1]
+        dopo = fine.find_next(string=lambda s: s and s.strip())
+        if not dopo or not CITYNOW_DATE_RE.match(dopo.strip()):
+            continue
+        visti.add(link)
+        articoli.append({'id': link, 'title': titolo, 'link': link})
+        if len(articoli) >= CITYNOW_MAX_ARTICLES:
+            break
+    return articoli
+
+
+def citynow_needs_baseline(seen):
+    """True se tra gli articoli già visti non ce n'è nessuno nel formato usato dalla pagina del tag.
+    Vecchio feed RSS: identificatori '?p=123456'. Pagina del tag: indirizzo completo dell'articolo.
+    Al primo passaggio gli articoli si salvano senza inviarli, per non rimandare su Telegram
+    gli articoli già inviati con il vecchio feed."""
+    for x in seen:
+        if x.startswith(CITYNOW_PREFIX) and '?' not in x:
+            return False
+    return True
+
+
+def check_citynow(seen, is_first_run):
+    new_seen = set()
+    try:
+        articoli = fetch_citynow()
+        print(f"{CITYNOW_SOURCE}: trovati {len(articoli)} articoli nella pagina")
+        if not articoli:
+            # Se succede, la struttura della pagina è cambiata: l'errore compare nel log dell'esecuzione
+            print(f"ATTENZIONE {CITYNOW_SOURCE}: nessun articolo riconosciuto, controllare la struttura della pagina")
+            return new_seen
+
+        baseline = is_first_run or citynow_needs_baseline(seen)
+        if baseline and not is_first_run:
+            print(f"{CITYNOW_SOURCE}: primo passaggio con la pagina del tag, salvo gli articoli senza inviarli.")
+
+        # dal meno recente al più recente, così su Telegram arrivano in ordine cronologico
+        for articolo in reversed(articoli):
+            if articolo['id'] in seen:
+                continue
+            new_seen.add(articolo['id'])
+            if baseline:
+                continue
+            message = f"📰 <b>{CITYNOW_SOURCE}</b>\n\n{articolo['title']}\n\n{articolo['link']}"
+            send_telegram(message)
+            print(f"Inviato: {articolo['title']}")
+    except Exception as e:
+        print(f"Errore con {CITYNOW_SOURCE}: {e}")
+    return new_seen
+
+
 def check_lnd_comunicati(seen, is_first_run):
     """
     Monitora i comunicati ufficiali LND Serie D.
@@ -317,6 +394,7 @@ def check_all():
     new_seen = set(seen)
 
     new_seen |= check_feeds(seen, is_first_run)
+    new_seen |= check_citynow(seen, is_first_run)
     new_seen |= check_lnd_comunicati(seen, is_first_run)
 
     save_seen(new_seen)
