@@ -259,16 +259,17 @@ def fetch_citynow():
     articoli = []
     visti = set()
     for h2 in soup.find_all('h2'):
-        a = h2.find('a', href=True)
+        # Nella pagina di CityNow il titolo sta dentro il link: <a href="..."><h2>titolo</h2></a>
+        a = h2.find_parent('a', href=True) or h2.find('a', href=True)
         if not a:
             continue
         link = a['href'].strip()
         if not link.startswith(CITYNOW_PREFIX) or link in visti:
             continue
-        titolo = a.get_text(' ', strip=True)
+        titolo = h2.get_text(' ', strip=True)
         # il primo testo dopo il titolo deve essere la data; altrimenti è un blocco laterale
-        # (si parte dall'ultimo elemento contenuto nell'h2, altrimenti la ricerca ritroverebbe il titolo stesso)
-        fine = h2
+        # (si parte dall'ultimo elemento contenuto nel link, altrimenti la ricerca ritroverebbe il titolo stesso)
+        fine = a
         while getattr(fine, 'contents', None):
             fine = fine.contents[-1]
         dopo = fine.find_next(string=lambda s: s and s.strip())
